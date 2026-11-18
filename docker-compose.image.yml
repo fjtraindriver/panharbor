@@ -1,0 +1,16 @@
+# 免源码部署：只拉预构建镜像，不需要 clone 仓库、不需要本地 build。
+# 用法：把本文件改名为 docker-compose.yml（或 -f 指定），与 .env 放同一目录，
+# 公开镜像免登录，直接 docker compose pull && docker compose up -d（见 README「用预构建镜像部署」一节）
+services:
+  panharbor:
+    image: ghcr.io/fjtraindriver/panharbor:latest
+    container_name: panharbor
+    restart: unless-stopped
+    ports:
+      - "${PANHARBOR_PORT:-18090}:8080"
+    environment:
+      - TZ=Asia/Shanghai
+      - APP_PASSWORD=${APP_PASSWORD:-panharbor}
+    volumes:
+      - ./data:/data
+    mem_limit: 256m

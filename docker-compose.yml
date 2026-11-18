@@ -1,0 +1,15 @@
+services:
+  panharbor:
+    build: .
+    image: ghcr.io/fjtraindriver/panharbor:latest
+    container_name: panharbor
+    restart: unless-stopped
+    ports:
+      - "${PANHARBOR_PORT:-18090}:8080"
+    environment:
+      - TZ=Asia/Shanghai
+      # 初始访问密码；首次登录后在设置页改密，库内哈希优先于此值
+      - APP_PASSWORD=${APP_PASSWORD:-panharbor}
+    volumes:
+      - ./data:/data
+    mem_limit: 256m
