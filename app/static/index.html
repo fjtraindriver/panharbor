@@ -6,7 +6,7 @@
 <title>PanHarbor · 找片转存</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="alternate icon" type="image/x-icon" href="/favicon.ico">
-<link rel="stylesheet" href="/style.css?v=0.3.1">
+<link rel="stylesheet" href="/style.css?v=0.4.0">
 </head>
 <body>
 <div id="loginView" class="login-wrap hidden">
@@ -42,9 +42,12 @@
       <div class="searchbar">
         <input id="kw" type="text" placeholder="输入片名，如：唐人街探案">
         <input id="note" type="text" placeholder="备注（可选，如：只要4K）">
-        <button id="searchBtn" class="primary">搜索</button>
+        <button id="searchBtn" class="primary">查影片</button>
+        <button id="directSearchBtn" class="ghost">直接搜资源</button>
       </div>
       <p id="searchMsg" class="muted"></p>
+      <div id="metaResults" class="meta-grid"></div>
+      <p id="metaAttribution" class="muted hidden">条目信息来自 TMDB 与豆瓣：本产品使用 TMDB API，但未经 TMDB 认可或认证；豆瓣条目以豆瓣网站为准。</p>
       <div id="candidates"></div>
 
       <div id="pickBox" class="card hidden">
@@ -94,6 +97,11 @@
         <div class="row"><button id="verifyPansou" class="ghost">验证 pansou</button><span id="verifyPansouMsg" class="muted"></span></div>
       </div>
       <div class="card">
+        <h3>影视元数据（查影片）</h3>
+        <label>TMDB API Key <input id="setTmdbKey" type="password" placeholder="不改留空"></label>
+        <p class="muted" id="tmdbKeyMsg">在 themoviedb.org 注册后于「设置 → API」免费申请，填入后「查影片」可显示海报、评分与简介；不填则仅查豆瓣（无评分）。</p>
+      </div>
+      <div class="card">
         <h3>夸克网盘</h3>
         <label>Cookie <textarea id="setQuarkCookie" rows="3" placeholder="不改留空；当前已配置的尾号见右侧状态"></textarea></label>
         <div class="row"><button id="verifyQuark" class="ghost">验证夸克</button><span id="verifyQuarkMsg" class="muted"></span></div>
@@ -141,6 +149,6 @@
     </section>
   </main>
 </div>
-<script src="/app.js?v=0.3.1"></script>
+<script src="/app.js?v=0.4.0"></script>
 </body>
 </html>

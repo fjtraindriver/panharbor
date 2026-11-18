@@ -19,7 +19,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
-from . import store, executor, planner
+from . import store, executor, planner, metadata
 from .pansou import PansouClient, PansouError
 from .quark import QuarkClient, QuarkError
 
@@ -91,7 +91,7 @@ def _pansou():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "PanHarbor/0.3.1"
+    server_version = "PanHarbor/0.4"
 
     # ---------- 工具 ----------
     def log_message(self, fmt, *args):  # 静音默认访问日志，排障看任务日志
@@ -179,6 +179,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json({"task": task} if task else {"error": "任务不存在"}, 200 if task else 404)
             if path == "/api/settings":
                 return self._send_json({"settings": self._public_settings()})
+            if path == "/api/meta/search":
+                qs = parse_qs(urlparse(self.path).query)
+                q = (qs.get("q") or [""])[0].strip()
+                if not q:
+                    return self._send_json({"error": "片名不能为空"}, 400)
+                items, notes = metadata.search_all(
+                    q, store.get_setting("tmdb_api_key"))
+                return self._send_json({"items": items, "notes": notes})
             if path == "/api/quark/folders":
                 qs = parse_qs(urlparse(self.path).query)
                 fid = (qs.get("fid") or ["0"])[0]
@@ -252,6 +260,7 @@ class Handler(BaseHTTPRequestHandler):
             "tv_fid": store.get_setting("tv_fid"),
             "movie_name": store.get_setting("movie_name"),
             "tv_name": store.get_setting("tv_name"),
+            "has_tmdb_key": bool(store.get_setting("tmdb_api_key")),
             "min_video_mb": store.get_setting("min_video_mb", "30"),
             "check_limit": store.get_setting("check_limit", "10"),
             "check_alive": store.get_setting("check_alive", "1"),
@@ -265,6 +274,8 @@ class Handler(BaseHTTPRequestHandler):
                 store.set_setting(key, str(body[key]))
         if body.get("pansou_password"):
             store.set_setting("pansou_password", body["pansou_password"])
+        if body.get("tmdb_api_key"):
+            store.set_setting("tmdb_api_key", body["tmdb_api_key"].strip())
         if body.get("quark_cookie"):
             store.set_setting("quark_cookie", body["quark_cookie"].strip())
         return self._send_json({"ok": True, "settings": self._public_settings()})

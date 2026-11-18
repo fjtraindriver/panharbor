@@ -50,11 +50,59 @@ document.querySelectorAll(".tab").forEach((btn) => {
 });
 
 // ---------- 搜索 ----------
+// 第一步：查影片（元数据条目）；第二步：选中条目再找资源（pansou）。
+// 也保留「直接搜资源」：跳过条目、用原始关键词走老流程兜底。
+let planTitleHint = "";  // 选中条目/直搜时带入计划的片名
+let planKindHint = "";   // 选中条目的类型（movie/tv），用于自动勾选
+
 $("searchBtn").onclick = async () => {
   const kw = $("kw").value.trim();
   if (!kw) return;
   $("searchBtn").disabled = true;
-  $("searchMsg").textContent = "搜索中（pansou 并发查多个源，可能要十几秒）…";
+  $("searchMsg").textContent = "正在查影片条目（TMDB + 豆瓣）…";
+  $("metaResults").innerHTML = ""; $("candidates").innerHTML = "";
+  $("pickBox").classList.add("hidden"); $("planBox").classList.add("hidden");
+  try {
+    const { items, notes } = await api("GET", "/api/meta/search?q=" + encodeURIComponent(kw));
+    $("metaAttribution").classList.remove("hidden");
+    $("searchMsg").textContent = items.length
+      ? `找到 ${items.length} 个条目，选一个再「找资源」；都不对可用「直接搜资源」`
+      : "没查到条目，可用「直接搜资源」按原关键词找";
+    if (notes && notes.length) $("searchMsg").textContent += "（" + notes.join("；") + "）";
+    items.forEach((it) => {
+      const card = document.createElement("div");
+      card.className = "meta-card";
+      const kindText = it.kind === "tv" ? "电视剧" : "电影";
+      const srcText = it.source === "tmdb" ? "TMDB" : "豆瓣";
+      const rating = it.rating ? `<span class="badge ok">★ ${it.rating}</span>` : "";
+      card.innerHTML = `
+        ${it.poster ? `<img class="meta-poster" src="${escapeHtml(it.poster)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : '<div class="meta-poster meta-noposter">无海报</div>'}
+        <div class="meta-info">
+          <div class="title">${escapeHtml(it.title)}${rating}</div>
+          <div class="muted">${escapeHtml(it.original_title || "")} ${it.year ? "· " + escapeHtml(it.year) : ""} · ${kindText} · ${srcText}</div>
+          <div class="muted meta-overview">${escapeHtml(it.overview || "")}</div>
+        </div>`;
+      const btn = document.createElement("button");
+      btn.textContent = "找资源";
+      btn.className = "primary";
+      btn.onclick = () => runResourceSearch(it.title, it);
+      card.appendChild(btn);
+      $("metaResults").appendChild(card);
+    });
+  } catch (e) { $("searchMsg").textContent = "查影片失败：" + e.message + "；可用「直接搜资源」"; }
+  $("searchBtn").disabled = false;
+};
+
+$("directSearchBtn").onclick = () => {
+  const kw = $("kw").value.trim();
+  if (kw) runResourceSearch(kw, null);
+};
+
+async function runResourceSearch(kw, metaItem) {
+  planTitleHint = metaItem ? metaItem.title : kw;
+  planKindHint = metaItem ? metaItem.kind : "";
+  $("searchBtn").disabled = true; $("directSearchBtn").disabled = true;
+  $("searchMsg").textContent = "搜索资源中（pansou 并发查多个源，可能要十几秒）…";
   $("candidates").innerHTML = ""; $("pickBox").classList.add("hidden"); $("planBox").classList.add("hidden");
   try {
     const { candidates } = await api("POST", "/api/search", { kw });
@@ -74,7 +122,11 @@ $("searchBtn").onclick = async () => {
       btn.onclick = () => {
         currentCandidate = c;
         $("pickUrl").textContent = c.url;
-        $("pickTitle").value = kw;
+        $("pickTitle").value = planTitleHint || kw;
+        if (planKindHint) {
+          const radio = document.querySelector(`input[name="kind"][value="${planKindHint}"]`);
+          if (radio) radio.checked = true;
+        }
         $("pickBox").classList.remove("hidden");
         $("planBox").classList.add("hidden");
         $("pickBox").scrollIntoView({ behavior: "smooth" });
@@ -83,8 +135,8 @@ $("searchBtn").onclick = async () => {
       $("candidates").appendChild(div);
     });
   } catch (e) { $("searchMsg").textContent = "搜索失败：" + e.message; }
-  $("searchBtn").disabled = false;
-};
+  $("searchBtn").disabled = false; $("directSearchBtn").disabled = false;
+}
 
 function escapeHtml(s) {
   return String(s || "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
@@ -182,6 +234,7 @@ async function loadSettings() {
   $("setCheckAlive").checked = settings.check_alive === "1";
   setFolderSel("movie", settings.movie_fid, settings.movie_name);
   setFolderSel("tv", settings.tv_fid, settings.tv_name);
+  if (settings.has_tmdb_key) $("tmdbKeyMsg").textContent = "TMDB API Key 已配置（不改留空即可）。在 themoviedb.org 注册后于「设置 → API」免费申请。";
   $("verifyQuarkMsg").textContent = settings.has_quark_cookie ? `已配置 Cookie（尾号 ${settings.quark_cookie_tail}）` : "尚未配置 Cookie";
 }
 
@@ -265,6 +318,7 @@ async function saveSettingsCore() {
     pansou_base: $("setPansouBase").value.trim(),
     pansou_username: $("setPansouUser").value.trim(),
     pansou_password: $("setPansouPass").value,
+    tmdb_api_key: $("setTmdbKey").value.trim(),
     quark_cookie: $("setQuarkCookie").value.trim(),
     movie_fid: window._folderSel.movie.fid, tv_fid: window._folderSel.tv.fid,
     movie_name: window._folderSel.movie.name,
