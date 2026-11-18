@@ -48,7 +48,7 @@ docker compose up -d --build
 首次登录后到「设置」页依次完成：
 
 1. 填 pansou 服务地址、账号、密码 → 点「验证 pansou」
-2. 填夸克 Cookie → 点「验证夸克并读取目录」→ 在下拉里选好电影目录、电视剧目录 → 保存设置
+2. 填夸克 Cookie → 点「验证夸克」→ 点「选择…」用目录浏览器逐级进入子文件夹，选好电影目录、电视剧目录 → 保存设置
 3. 「状态」页两项全绿，即可回「搜索」页开始找片
 
 ## 日常使用
@@ -74,7 +74,7 @@ docker compose up -d --build   # 数据在 ./data 卷里，不受影响
 | APP_PASSWORD | .env | 初始密码；设置页改密后以库内哈希为准 |
 | pansou 地址/账号/密码 | 设置页 | 填部署机能实际访问到的地址（直连后端或经反向代理中转均可） |
 | 夸克 Cookie | 设置页 | 只存部署机数据卷，不进仓库、不进日志；服务端轮换值（Set-Cookie）会自动回写续期，后台约每 24 小时低频保活一次，上次保活结果见状态页 |
-| 电影/电视剧目录 | 设置页 | 从夸克根目录下拉选择（存 fid） |
+| 电影/电视剧目录 | 设置页 | 目录浏览器逐级进入子文件夹选择（存 fid 与全路径名） |
 | 小文件阈值/验链上限 | 设置页 | 默认 30MB / 10 条 |
 
 ## 安全
@@ -107,8 +107,8 @@ docker compose up -d --build   # 数据在 ./data 卷里，不受影响
 app/            后端与前端（main.py 服务与接口，pansou.py / quark.py 客户端，
                 planner.py 计划生成器，executor.py 任务执行，store.py 存储，
                 static/ 页面）
-tools/          一次性验证脚本
-tests/          单元测试（python3 tests/test_planner.py、tests/test_quark_cookie.py）
+tools/          一次性验证脚本与图标生成器（make_favicon.py，纯标准库）
+tests/          单元测试（python3 tests/test_planner.py、tests/test_quark_cookie.py、tests/test_folders_api.py）
 docs/           蓝图与设计文档
 ```
 

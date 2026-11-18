@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PanHarbor · 找片转存</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="alternate icon" type="image/x-icon" href="/favicon.ico">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -94,14 +96,29 @@
       <div class="card">
         <h3>夸克网盘</h3>
         <label>Cookie <textarea id="setQuarkCookie" rows="3" placeholder="不改留空；当前已配置的尾号见右侧状态"></textarea></label>
-        <div class="row"><button id="verifyQuark" class="ghost">验证夸克并读取目录</button><span id="verifyQuarkMsg" class="muted"></span></div>
-        <label>电影目录
-          <select id="setMovieFid"></select>
-        </label>
-        <label>电视剧目录
-          <select id="setTvFid"></select>
-        </label>
-        <p class="muted">目录下拉来自夸克根目录；目标在子目录时，先在夸克里把目录移到根目录层级，或后续版本再补目录浏览器。</p>
+        <div class="row"><button id="verifyQuark" class="ghost">验证夸克</button><span id="verifyQuarkMsg" class="muted"></span></div>
+        <div class="dir-field">
+          <span>电影目录</span>
+          <span id="movieFidName" class="dir-name">未选择</span>
+          <button id="pickMovie" class="ghost">选择…</button>
+          <input id="setMovieFid" type="hidden">
+        </div>
+        <div class="dir-field">
+          <span>电视剧目录</span>
+          <span id="tvFidName" class="dir-name">未选择</span>
+          <button id="pickTv" class="ghost">选择…</button>
+          <input id="setTvFid" type="hidden">
+        </div>
+        <div id="folderPicker" class="picker hidden">
+          <div class="row"><strong id="pickerTitle">选择目录</strong><span id="pickerMsg" class="muted"></span></div>
+          <div id="pickerCrumbs" class="crumbs"></div>
+          <div id="pickerList"></div>
+          <div class="row">
+            <button id="pickerChoose" class="primary">选此文件夹</button>
+            <button id="pickerCancel" class="ghost">取消</button>
+          </div>
+        </div>
+        <p class="muted">点「选择…」逐级进入子文件夹，停在目标层后点「选此文件夹」；选好后记得点页面下方「保存设置」。</p>
       </div>
       <div class="card">
         <h3>规则</h3>

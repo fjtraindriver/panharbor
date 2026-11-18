@@ -49,3 +49,10 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: #aeb
 .login-box h1 { margin-bottom: 4px; }
 .task-row { display: flex; justify-content: space-between; padding: 9px 4px; border-bottom: 1px solid #232a31; cursor: pointer; font-size: 14px; }
 .status-card { font-size: 14px; line-height: 1.9; }
+.dir-field { display: flex; align-items: center; gap: 10px; margin: 10px 0; font-size: 13px; color: #aeb6bf; flex-wrap: wrap; }
+.dir-name { color: #e6e9ec; word-break: break-all; }
+.picker { border: 1px solid #2b333c; border-radius: 10px; padding: 10px 12px; margin: 10px 0; background: #11161c; }
+.crumbs { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin: 6px 0; font-size: 13px; color: #8a94a0; }
+.crumbs button { padding: 4px 10px; font-size: 13px; }
+.picker-row { padding: 8px 6px; border-bottom: 1px dashed #232a31; cursor: pointer; font-size: 14px; }
+.picker-row:hover { background: #171c22; }

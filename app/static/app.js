@@ -165,6 +165,14 @@ async function loadTasks() {
 $("refreshTasks").onclick = loadTasks;
 
 // ---------- 设置 ----------
+window._folderSel = { movie: { fid: "", name: "" }, tv: { fid: "", name: "" } };
+
+function setFolderSel(kind, fid, name) {
+  window._folderSel[kind] = { fid: fid || "", name: name || "" };
+  $(kind === "movie" ? "setMovieFid" : "setTvFid").value = fid || "";
+  $(kind === "movie" ? "movieFidName" : "tvFidName").textContent = name || "未选择";
+}
+
 async function loadSettings() {
   const { settings } = await api("GET", "/api/settings");
   $("setPansouBase").value = settings.pansou_base || "";
@@ -172,19 +180,9 @@ async function loadSettings() {
   $("setMinVideo").value = settings.min_video_mb || 30;
   $("setCheckLimit").value = settings.check_limit || 10;
   $("setCheckAlive").checked = settings.check_alive === "1";
-  window._fidNames = { movie: settings.movie_name || "", tv: settings.tv_name || "" };
-  fillFolderSelect($("setMovieFid"), settings.movie_fid, settings.movie_name);
-  fillFolderSelect($("setTvFid"), settings.tv_fid, settings.tv_name);
+  setFolderSel("movie", settings.movie_fid, settings.movie_name);
+  setFolderSel("tv", settings.tv_fid, settings.tv_name);
   $("verifyQuarkMsg").textContent = settings.has_quark_cookie ? `已配置 Cookie（尾号 ${settings.quark_cookie_tail}）` : "尚未配置 Cookie";
-}
-
-function fillFolderSelect(sel, fid, name) {
-  sel.innerHTML = "";
-  if (fid) {
-    const opt = document.createElement("option");
-    opt.value = fid; opt.textContent = name || fid; opt.selected = true;
-    sel.appendChild(opt);
-  }
 }
 
 $("verifyQuark").onclick = async () => {
@@ -192,21 +190,65 @@ $("verifyQuark").onclick = async () => {
   try {
     // 先把页面上新填的 Cookie 存进去再验
     await saveSettingsCore();
-    const { root_folders } = await api("POST", "/api/verify/quark", {});
-    for (const [selId, key] of [["setMovieFid", "movie"], ["setTvFid", "tv"]]) {
-      const sel = $(selId);
-      const current = sel.value;
-      sel.innerHTML = "";
-      root_folders.forEach((f) => {
-        const opt = document.createElement("option");
-        opt.value = f.fid; opt.textContent = f.name;
-        if (f.fid === current) opt.selected = true;
-        sel.appendChild(opt);
-      });
-      sel.dataset.names = JSON.stringify(Object.fromEntries(root_folders.map((f) => [f.fid, f.name])));
-    }
-    $("verifyQuarkMsg").textContent = "Cookie 有效，已读取根目录，请在下拉里选电影/电视剧目录后保存";
+    await api("POST", "/api/verify/quark", {});
+    $("verifyQuarkMsg").textContent = "Cookie 有效，点「选择…」可逐级浏览子目录";
   } catch (e) { $("verifyQuarkMsg").textContent = "验证失败：" + e.message; }
+};
+
+// ---------- 目录浏览器（支持逐级进入子文件夹） ----------
+let picker = null; // {kind, stack: [{fid, name}]}
+
+async function openPicker(kind) {
+  // 新填了 Cookie 先存再浏览，避免拿旧 Cookie 读目录
+  await saveSettingsCore().catch(() => {});
+  picker = { kind, stack: [{ fid: "0", name: "根目录" }] };
+  $("pickerTitle").textContent = kind === "movie" ? "选择电影目录" : "选择电视剧目录";
+  $("folderPicker").classList.remove("hidden");
+  await renderPicker();
+}
+
+async function renderPicker() {
+  const crumbs = $("pickerCrumbs");
+  crumbs.innerHTML = "";
+  picker.stack.forEach((seg, idx) => {
+    const btn = document.createElement("button");
+    btn.className = "ghost";
+    btn.textContent = seg.name;
+    btn.onclick = async () => { picker.stack = picker.stack.slice(0, idx + 1); await renderPicker(); };
+    crumbs.appendChild(btn);
+    if (idx < picker.stack.length - 1) crumbs.appendChild(document.createTextNode(" / "));
+  });
+  const top = picker.stack[picker.stack.length - 1];
+  $("pickerChoose").textContent = `选此文件夹（${top.name}）`;
+  $("pickerList").innerHTML = '<p class="muted">加载中…</p>';
+  $("pickerMsg").textContent = "";
+  try {
+    const { folders } = await api("GET", "/api/quark/folders?fid=" + encodeURIComponent(top.fid));
+    if (!folders.length) {
+      $("pickerList").innerHTML = '<p class="muted">（没有子文件夹，可直接选此文件夹）</p>';
+      return;
+    }
+    $("pickerList").innerHTML = "";
+    folders.forEach((f) => {
+      const row = document.createElement("div");
+      row.className = "picker-row";
+      row.textContent = "📁 " + f.name;
+      row.onclick = async () => { picker.stack.push({ fid: f.fid, name: f.name }); await renderPicker(); };
+      $("pickerList").appendChild(row);
+    });
+  } catch (e) { $("pickerMsg").textContent = "读取目录失败：" + e.message; $("pickerList").innerHTML = ""; }
+}
+
+$("pickMovie").onclick = () => openPicker("movie");
+$("pickTv").onclick = () => openPicker("tv");
+$("pickerCancel").onclick = () => { $("folderPicker").classList.add("hidden"); picker = null; };
+$("pickerChoose").onclick = () => {
+  if (!picker) return;
+  const top = picker.stack[picker.stack.length - 1];
+  const path = picker.stack.map((s) => s.name).join(" / ");
+  setFolderSel(picker.kind, top.fid, path);
+  $("folderPicker").classList.add("hidden");
+  picker = null;
 };
 
 $("verifyPansou").onclick = async () => {
@@ -219,18 +261,14 @@ $("verifyPansou").onclick = async () => {
 };
 
 async function saveSettingsCore() {
-  const movieSel = $("setMovieFid"), tvSel = $("setTvFid");
-  const namesOf = (sel) => {
-    try { return JSON.parse(sel.dataset.names || "{}")[sel.value] || ""; } catch { return ""; }
-  };
   return api("POST", "/api/settings", {
     pansou_base: $("setPansouBase").value.trim(),
     pansou_username: $("setPansouUser").value.trim(),
     pansou_password: $("setPansouPass").value,
     quark_cookie: $("setQuarkCookie").value.trim(),
-    movie_fid: movieSel.value, tv_fid: tvSel.value,
-    movie_name: namesOf(movieSel) || window._fidNames?.movie || "",
-    tv_name: namesOf(tvSel) || window._fidNames?.tv || "",
+    movie_fid: window._folderSel.movie.fid, tv_fid: window._folderSel.tv.fid,
+    movie_name: window._folderSel.movie.name,
+    tv_name: window._folderSel.tv.name,
     min_video_mb: $("setMinVideo").value || "30",
     check_limit: $("setCheckLimit").value || "10",
     check_alive: $("setCheckAlive").checked ? "1" : "0",

@@ -91,7 +91,7 @@ def _pansou():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "PanHarbor/0.2"
+    server_version = "PanHarbor/0.3"
 
     # ---------- 工具 ----------
     def log_message(self, fmt, *args):  # 静音默认访问日志，排障看任务日志
@@ -150,6 +150,16 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/app.js":
             return self._send_file(os.path.join(STATIC_DIR, "app.js"),
                                    "application/javascript; charset=utf-8")
+        if path == "/favicon.svg":
+            return self._send_file(os.path.join(STATIC_DIR, "favicon.svg"),
+                                   "image/svg+xml; charset=utf-8")
+        if path == "/favicon.ico":
+            ico = os.path.join(STATIC_DIR, "favicon.ico")
+            if os.path.exists(ico):
+                return self._send_file(ico, "image/x-icon")
+            # 图标二进制不在当前部署里时，用 SVG 兜底（现代浏览器可识别）
+            return self._send_file(os.path.join(STATIC_DIR, "favicon.svg"),
+                                   "image/svg+xml; charset=utf-8")
         if path == "/style.css":
             return self._send_file(os.path.join(STATIC_DIR, "style.css"),
                                    "text/css; charset=utf-8")
