@@ -30,7 +30,7 @@ def _run(task_id, plan, title, kind):
 
     try:
         cookie = store.get_setting("quark_cookie")
-        client = QuarkClient(cookie)
+        client = QuarkClient(cookie, on_cookie_update=store.setting_updater("quark_cookie"))
         parent_fid = store.get_setting("movie_fid" if kind == "movie" else "tv_fid")
         if not parent_fid:
             raise QuarkError("设置里还没选目标目录（电影/电视剧文件夹）")

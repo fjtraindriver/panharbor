@@ -12,7 +12,9 @@ PanHarbor 主服务：零第三方依赖（Python 标准库 http.server），
 import hashlib
 import json
 import os
+import random
 import secrets
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -40,7 +42,46 @@ def _check_password(pw):
 
 
 def _quark():
-    return QuarkClient(store.get_setting("quark_cookie"))
+    return QuarkClient(store.get_setting("quark_cookie"),
+                       on_cookie_update=store.setting_updater("quark_cookie"))
+
+
+# ---------- 夸克 Cookie 保活 ----------
+# Cookie 靠服务端 Set-Cookie 轮换续期（见 quark.py）：只要定期有一次成功请求，
+# 新值就会被吸收并写回库里。保活线程每 24 小时列一次根目录，另加 0~3 小时
+# 随机抖动，避免固定时间点的机械特征；频率再高没有收益，还有风控风险。
+KEEPALIVE_INTERVAL = 24 * 3600
+KEEPALIVE_JITTER = 3 * 3600
+KEEPALIVE_FIRST_DELAY = (120, 600)  # 启动后先等 2~10 分钟再首次保活
+
+
+def _keepalive_delay():
+    return KEEPALIVE_INTERVAL + random.uniform(0, KEEPALIVE_JITTER)
+
+
+def _keepalive_once():
+    """跑一次保活，结果记进 settings 供状态页展示。返回是否成功。"""
+    if not store.get_setting("quark_cookie"):
+        return False
+    try:
+        _quark().list_dir("0", size=1, max_pages=1)
+        ok, msg = True, "Cookie 有效"
+    except Exception as e:
+        ok, msg = False, str(e)[:200]
+    store.set_setting("quark_keepalive_at", str(int(time.time())))
+    store.set_setting("quark_keepalive_ok", "1" if ok else "0")
+    store.set_setting("quark_keepalive_msg", msg)
+    return ok
+
+
+def _keepalive_loop():
+    time.sleep(random.uniform(*KEEPALIVE_FIRST_DELAY))
+    while True:
+        try:
+            _keepalive_once()
+        except Exception:
+            pass  # 保活线程绝不能因一次异常退出
+        time.sleep(_keepalive_delay())
 
 
 def _pansou():
@@ -50,7 +91,7 @@ def _pansou():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "PanHarbor/0.1"
+    server_version = "PanHarbor/0.2"
 
     # ---------- 工具 ----------
     def log_message(self, fmt, *args):  # 静音默认访问日志，排障看任务日志
@@ -226,6 +267,12 @@ class Handler(BaseHTTPRequestHandler):
             out["quark"] = {"ok": True, "message": "Cookie 有效"}
         except Exception as e:
             out["quark"] = {"ok": False, "message": str(e)}
+        ka_at = store.get_setting("quark_keepalive_at")
+        out["keepalive"] = {
+            "at": int(ka_at) if ka_at.isdigit() else None,
+            "ok": (store.get_setting("quark_keepalive_ok") == "1") if ka_at else None,
+            "message": store.get_setting("quark_keepalive_msg"),
+        }
         tasks = store.list_tasks(100)
         out["tasks"] = {
             "total": len(tasks),
@@ -290,6 +337,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     store.init(DATA_DIR)
+    threading.Thread(target=_keepalive_loop, daemon=True).start()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     print(f"PanHarbor listening on :{PORT}, data dir {DATA_DIR}", flush=True)
     server.serve_forever()

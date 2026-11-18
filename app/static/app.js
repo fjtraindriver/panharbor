@@ -263,9 +263,14 @@ async function loadStatus() {
   $("statusBox").innerHTML = '<p class="muted">检查中…</p>';
   const s = await refreshStatusDots();
   if (!s) { $("statusBox").innerHTML = '<p class="error">状态获取失败</p>'; return; }
+  const ka = s.keepalive || {};
+  const kaText = ka.at
+    ? `${ka.ok ? "✅" : "❌"} ${new Date(ka.at * 1000).toLocaleString()} ${escapeHtml(ka.message || "")}`
+    : "尚无记录（启动后几分钟内首次执行，之后约每 24 小时一次）";
   $("statusBox").innerHTML = `<div class="card status-card">
     pansou：${s.pansou.ok ? "✅" : "❌"} ${escapeHtml(s.pansou.message)}<br>
     夸克：${s.quark.ok ? "✅" : "❌"} ${escapeHtml(s.quark.message)}<br>
+    夸克 Cookie 保活：${kaText}<br>
     任务：共 ${s.tasks.total}，完成 ${s.tasks.done}，失败 ${s.tasks.failed}</div>`;
 }
 $("refreshStatus").onclick = loadStatus;

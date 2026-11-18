@@ -73,7 +73,7 @@ docker compose up -d --build   # 数据在 ./data 卷里，不受影响
 | PANHARBOR_PORT | .env | 对外端口，默认 18090 |
 | APP_PASSWORD | .env | 初始密码；设置页改密后以库内哈希为准 |
 | pansou 地址/账号/密码 | 设置页 | 填部署机能实际访问到的地址（直连后端或经反向代理中转均可） |
-| 夸克 Cookie | 设置页 | 只存部署机数据卷，不进仓库、不进日志 |
+| 夸克 Cookie | 设置页 | 只存部署机数据卷，不进仓库、不进日志；服务端轮换值（Set-Cookie）会自动回写续期，后台约每 24 小时低频保活一次，上次保活结果见状态页 |
 | 电影/电视剧目录 | 设置页 | 从夸克根目录下拉选择（存 fid） |
 | 小文件阈值/验链上限 | 设置页 | 默认 30MB / 10 条 |
 
@@ -88,7 +88,7 @@ docker compose up -d --build   # 数据在 ./data 卷里，不受影响
 
 | 现象 | 处理 |
 |---|---|
-| 状态页夸克红 | Cookie 过期：从浏览器重新取一份，在设置页更新 |
+| 状态页夸克红 | 先看状态页「夸克 Cookie 保活」的上次结果与时间；确认 Cookie 已失效时，从浏览器重新取一份，在设置页更新 |
 | 状态页 pansou 红 | 检查 pansou 地址与账号密码，确认部署机能访问该地址且 pansou 服务在运行 |
 | 搜索超时 | pansou 首搜较慢属正常；贴近 60 秒时精简 pansou 后端的慢源/插件 |
 | 任务 partial | 看任务日志：多为某个嵌套目录组直存被拒（蓝图验证项 V2），其余文件不受影响 |
@@ -108,7 +108,7 @@ app/            后端与前端（main.py 服务与接口，pansou.py / quark.py
                 planner.py 计划生成器，executor.py 任务执行，store.py 存储，
                 static/ 页面）
 tools/          一次性验证脚本
-tests/          计划生成器单元测试（python3 tests/test_planner.py）
+tests/          单元测试（python3 tests/test_planner.py、tests/test_quark_cookie.py）
 docs/           蓝图与设计文档
 ```
 

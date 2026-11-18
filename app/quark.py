@@ -6,6 +6,10 @@
 列目录、换 stoken、列分享、提交保存、轮询任务。
 建文件夹 / 改名接口与上面同族，待 V3 扩展验证（失败会抛 QuarkError，
 上层会把原始信息写入任务日志，不会静默吞掉）。
+
+Cookie 续期：夸克会通过响应的 Set-Cookie 轮换部分字段（典型是 __puus），
+新值不回写的话旧 Cookie 迟早失效。本客户端每次请求后都会吸收 Set-Cookie，
+合并出新 Cookie 后经 on_cookie_update 回调交给上层持久化。
 """
 
 import json
@@ -28,11 +32,80 @@ class QuarkError(Exception):
         self.status = status
 
 
+def parse_cookie(cookie):
+    """把 Cookie 字符串解析成有序的 [(name, value)]，跳过坏段。"""
+    pairs = []
+    for part in (cookie or "").split(";"):
+        part = part.strip()
+        if not part or "=" not in part:
+            continue
+        name, value = part.split("=", 1)
+        name = name.strip()
+        if name:
+            pairs.append((name, value.strip()))
+    return pairs
+
+
+def merge_set_cookies(cookie, set_cookie_headers):
+    """把响应 Set-Cookie 的新值合并进 Cookie 字符串。
+
+    每个 Set-Cookie 只取第一个 ; 前的 name=value（其余是 expires/path 等属性）。
+    值为空视为服务端删除该字段。没有实际变化时原样返回。
+    """
+    pairs = parse_cookie(cookie)
+    index = {name: i for i, (name, _) in enumerate(pairs)}
+    changed = False
+    for header in set_cookie_headers or []:
+        first = (header or "").split(";", 1)[0].strip()
+        if not first or "=" not in first:
+            continue
+        name, value = first.split("=", 1)
+        name, value = name.strip(), value.strip()
+        if not name:
+            continue
+        if not value:
+            if name in index:
+                pairs[index[name]] = (name, None)
+                changed = True
+            continue
+        if name in index:
+            if pairs[index[name]][1] != value:
+                pairs[index[name]] = (name, value)
+                changed = True
+        else:
+            index[name] = len(pairs)
+            pairs.append((name, value))
+            changed = True
+    if not changed:
+        return cookie
+    return "; ".join(f"{n}={v}" for n, v in pairs if v is not None)
+
+
 class QuarkClient:
-    def __init__(self, cookie):
+    def __init__(self, cookie, on_cookie_update=None):
         self.cookie = (cookie or "").strip()
         if not self.cookie:
             raise QuarkError("未配置夸克 Cookie")
+        self._on_cookie_update = on_cookie_update
+
+    def _absorb_set_cookies(self, headers):
+        """吸收响应里的 Set-Cookie 轮换值，变了就更新自身并回调上层持久化。"""
+        if headers is None:
+            return
+        try:
+            values = headers.get_all("Set-Cookie") or []
+        except Exception:
+            return
+        if not values:
+            return
+        merged = merge_set_cookies(self.cookie, values)
+        if merged != self.cookie:
+            self.cookie = merged
+            if self._on_cookie_update:
+                try:
+                    self._on_cookie_update(merged)
+                except Exception:
+                    pass  # 持久化失败不打断本次请求，下次请求还会再吸收
 
     # ---------- 基础请求 ----------
     def _call(self, method, path, params=None, body=None):
@@ -51,9 +124,11 @@ class QuarkClient:
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
+                self._absorb_set_cookies(resp.headers)
                 payload = json.loads(resp.read().decode("utf-8"))
                 status = resp.status
         except urllib.error.HTTPError as e:
+            self._absorb_set_cookies(getattr(e, "headers", None))
             raw = e.read().decode("utf-8", "ignore")
             try:
                 payload = json.loads(raw)

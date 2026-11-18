@@ -41,6 +41,18 @@ def set_setting(key, value):
         _conn.commit()
 
 
+def setting_updater(key):
+    """返回一个回调：值非空且与库里不同才写回。
+
+    给夸克客户端的 Cookie 轮换回写用（服务端 Set-Cookie 下发新值时持久化），
+    其它驱动将来有同类续期需求也可复用。
+    """
+    def _update(value):
+        if value and value != get_setting(key):
+            set_setting(key, value)
+    return _update
+
+
 def create_task(title, kind):
     now = time.time()
     with _lock:
