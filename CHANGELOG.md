@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-18
+
+### Fixed
+
+- 部署在 CDN（如 Cloudflare 橙云）之后时，CDN 按扩展名默认缓存 `/app.js`、`/style.css` 且源站未声明缓存策略，升级后出现「新 HTML 配旧 JS」混版：设置页有「选择…」按钮但点击无反应。修复：静态文件响应统一带 `Cache-Control: no-cache`，且首页引用的 JS/CSS URL 带版本号参数，双保险防混版
+
 ## [0.3.0] - 2026-11-18
 
 ### Added

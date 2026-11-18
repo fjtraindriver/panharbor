@@ -87,6 +87,11 @@ def main_test():
             status, _, data = req(port, "GET", "/")
             html = data.decode("utf-8")
             assert "/favicon.svg" in html and "folderPicker" in html and "pickMovie" in html
+            # 静态文件必须带 no-cache 且首页引用带版本号的资源 URL，
+            # 防止 CDN/浏览器缓存旧 JS 造成「新 HTML 配旧 JS」混版
+            assert "/app.js?v=" in html and "/style.css?v=" in html
+            status, headers, _ = req(port, "GET", "/app.js?v=0.3.1")
+            assert status == 200 and headers.get("Cache-Control") == "no-cache", headers.get("Cache-Control")
             print("folders api + favicon ok")
         finally:
             main._quark = orig_quark

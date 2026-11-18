@@ -91,7 +91,7 @@ def _pansou():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "PanHarbor/0.3"
+    server_version = "PanHarbor/0.3.1"
 
     # ---------- 工具 ----------
     def log_message(self, fmt, *args):  # 静音默认访问日志，排障看任务日志
@@ -117,6 +117,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
+        # 静态文件一律 no-cache：本应用常置于 CDN/反代之后，CDN 会按扩展名
+        # 默认缓存 .js/.css，若源站不声明，升级后会出现「新 HTML 配旧 JS」
+        # 的混版（页面有新按钮但点了没反应）。文件都很小，每次回源可接受。
+        self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         self.wfile.write(body)
 
