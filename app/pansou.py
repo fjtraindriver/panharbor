@@ -40,7 +40,7 @@ class PansouClient:
         self._token = None
         self._token_at = 0
 
-    def _request(self, method, path, body=None, auth=True):
+    def _request(self, method, path, body=None, auth=True, timeout=90):
         url = self.base + path
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         if auth and self._token:
@@ -48,7 +48,7 @@ class PansouClient:
         data = json.dumps(body).encode("utf-8") if body is not None else None
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
-            with urllib.request.urlopen(req, timeout=90) as resp:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return resp.status, json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             raw = e.read().decode("utf-8", "ignore")
@@ -109,6 +109,53 @@ class PansouClient:
             msg = payload.get("error") or payload.get("message") or f"HTTP {status}"
             raise PansouError(f"pansou 搜索失败: {msg}")
         return self._normalize(payload)
+
+    # 验链批量接口在 pansou 侧是逐条串行检测（单条上限约 10 秒），
+    # 10 条全未命中缓存时最坏约 100 秒，超时要给足但别超过常见反代的 180 秒。
+    CHECK_TIMEOUT = 150
+
+    def check_links(self, candidates):
+        """批量验链：POST /api/check/links，一次提交、按 url 返回 {url: state}。
+
+        state 原样透传 pansou 的五态：ok / bad / locked / unsupported /
+        uncertain，状态到「有效/失效/未验」的映射由上层决定。
+        接口不存在（旧版 pansou）、返回格式不识别、HTTP 非 200 一律抛
+        PansouError，由上层走匿名直查兜底，绝不静默当作验链成功。
+        """
+        self._ensure_token()
+        items = [{
+            "disk_type": "quark",
+            "url": cand["url"],
+            "password": cand.get("password", ""),
+        } for cand in candidates]
+        if not items:
+            return {}
+        body = {"items": items}
+        status, payload = self._request("POST", "/api/check/links", body,
+                                        timeout=self.CHECK_TIMEOUT)
+        code = str(payload.get("code", ""))
+        if status in (401, 403) or "AUTH" in code:
+            if self.username:
+                self.login()
+                status, payload = self._request("POST", "/api/check/links", body,
+                                                timeout=self.CHECK_TIMEOUT)
+        if status != 200:
+            msg = payload.get("error") or payload.get("message") or f"HTTP {status}"
+            raise PansouError(f"pansou 验链失败: {msg}")
+        results = payload.get("results")
+        if not isinstance(results, list):
+            data = payload.get("data")
+            if isinstance(data, dict):
+                results = data.get("results")
+        if not isinstance(results, list) or not results:
+            raise PansouError("pansou 验链返回格式不识别（可能是不支持该接口的旧版本）")
+        out = {}
+        for r in results:
+            if isinstance(r, dict) and r.get("url"):
+                out[r["url"]] = r.get("state") or "uncertain"
+        if not out:
+            raise PansouError("pansou 验链返回里没有可用结果")
+        return out
 
     @staticmethod
     def _normalize(payload):

@@ -21,6 +21,11 @@ import urllib.error
 BASE = "https://drive-h.quark.cn/1/clouddrive"
 COMMON = {"pr": "ucpro", "fr": "pc", "uc_param_str": ""}
 
+# 单次请求超时（秒）：部署机房到夸克跨地域访问延迟与抖动都大，30 秒容易
+# 把慢响应误杀（保活已实测超时过），放宽到 120 秒；代价是真挂住时也要
+# 等这么久才报错，验链是串行逐条的，条数上限别设太大就是这个原因。
+REQUEST_TIMEOUT = 120
+
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
@@ -82,15 +87,20 @@ def merge_set_cookies(cookie, set_cookie_headers):
 
 
 class QuarkClient:
-    def __init__(self, cookie, on_cookie_update=None):
-        self.cookie = (cookie or "").strip()
-        if not self.cookie:
+    def __init__(self, cookie, on_cookie_update=None, *, anonymous=False):
+        # anonymous=True：匿名访客模式，不带任何 Cookie、也不吸收 Set-Cookie。
+        # 分享页的 token/detail 本是访客接口，验链只需判断链接死活，
+        # 没必要把用户账号的 Cookie 挂上去徒增账号维度的频控风险；
+        # 账号操作（列自有目录、转存、改名）仍必须用带 Cookie 的普通模式。
+        self._anonymous = anonymous
+        self.cookie = "" if anonymous else (cookie or "").strip()
+        if not self.cookie and not anonymous:
             raise QuarkError("未配置夸克 Cookie")
-        self._on_cookie_update = on_cookie_update
+        self._on_cookie_update = None if anonymous else on_cookie_update
 
     def _absorb_set_cookies(self, headers):
         """吸收响应里的 Set-Cookie 轮换值，变了就更新自身并回调上层持久化。"""
-        if headers is None:
+        if self._anonymous or headers is None:
             return
         try:
             values = headers.get_all("Set-Cookie") or []
@@ -114,16 +124,17 @@ class QuarkClient:
             q.update(params)
         url = BASE + path + "?" + urllib.parse.urlencode(q)
         headers = {
-            "Cookie": self.cookie,
             "User-Agent": UA,
             "Referer": "https://pan.quark.cn/",
             "Content-Type": "application/json",
             "Accept": "application/json, text/plain, */*",
         }
+        if self.cookie:
+            headers["Cookie"] = self.cookie
         data = json.dumps(body).encode("utf-8") if body is not None else None
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
                 self._absorb_set_cookies(resp.headers)
                 payload = json.loads(resp.read().decode("utf-8"))
                 status = resp.status
@@ -237,17 +248,42 @@ class QuarkClient:
                     queue.append((it.get("fid"), path))
         return result
 
+    # 夸克分享 token 接口的明确死链错误码（与 pansou 检测服务的判定对齐）：
+    # 41004/41010/41011 为链接失效类；41008 是需要提取码，不算死链。
+    DEAD_TOKEN_CODES = (41004, 41010, 41011)
+    LOCKED_TOKEN_CODE = 41008
+    DEAD_MESSAGE_KEYS = ("不存在", "失效", "违规", "过期", "取消")
+
     def check_share_alive(self, url, passcode=""):
-        """轻量验活：能换 stoken 且能列出顶层文件即视为活。返回 (alive, top_items)。"""
+        """轻量验活（三态）：返回 (alive, top_items)，alive 为 True/False/None。
+
+        True=能换 stoken 且能列出顶层文件；False=夸克明确判死（死链错误码
+        或失效类文案，或 token 换到了但文件列表为空）；None=没验成——
+        网络失败、超时、需要提取码、其他未识别错误。把网络问题判成死链
+        是假阴性，所以不确定一律 None（页面显示「未验」），不判 False。
+        """
         pwd_id = self.parse_share_id(url)
         if not pwd_id:
-            return False, []
+            return None, []
         try:
             stoken = self.share_token(pwd_id, passcode)
             items = self.share_detail(pwd_id, stoken, "0", size=20, max_pages=1)
-            return len(items) > 0, items
-        except QuarkError:
-            return False, []
+            return (True, items) if items else (False, [])
+        except QuarkError as e:
+            payload = e.payload if isinstance(e.payload, dict) else {}
+            code = payload.get("code")
+            try:
+                code = int(code) if code is not None else None
+            except (TypeError, ValueError):
+                code = None
+            if code in self.DEAD_TOKEN_CODES:
+                return False, []
+            if code == self.LOCKED_TOKEN_CODE:
+                return None, []
+            msg = str(e)
+            if any(k in msg for k in self.DEAD_MESSAGE_KEYS):
+                return False, []
+            return None, []
 
     # ---------- 转存 ----------
     def save(self, pwd_id, stoken, fid_list, token_list, to_pdir_fid, pdir_fid="0"):

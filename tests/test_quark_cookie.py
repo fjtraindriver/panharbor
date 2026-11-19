@@ -9,7 +9,7 @@ from email.message import Message
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.quark import QuarkClient, merge_set_cookies  # noqa: E402
+from app.quark import QuarkClient, REQUEST_TIMEOUT, merge_set_cookies  # noqa: E402
 
 
 def test_merge():
@@ -58,18 +58,27 @@ class FakeResp:
 def test_call_absorbs():
     import app.quark as quark_mod
     saved = {}
+    seen = {}
     client = QuarkClient("__pus=aaa; __puus=old",
                          on_cookie_update=lambda c: saved.update(cookie=c))
     orig = quark_mod.urllib.request.urlopen
-    quark_mod.urllib.request.urlopen = lambda req, timeout=None: FakeResp(
-        {"code": 0, "data": {"list": [], "metadata": {"_total": 0}}},
-        ["__puus=rotated; expires=Wed, 01 Jan 2030 00:00:00 GMT; path=/"])
+
+    def fake_urlopen(req, timeout=None):
+        seen["timeout"] = timeout
+        return FakeResp(
+            {"code": 0, "data": {"list": [], "metadata": {"_total": 0}}},
+            ["__puus=rotated; expires=Wed, 01 Jan 2030 00:00:00 GMT; path=/"])
+
+    quark_mod.urllib.request.urlopen = fake_urlopen
     try:
         client.list_dir("0", size=1, max_pages=1)
     finally:
         quark_mod.urllib.request.urlopen = orig
     assert client.cookie == "__pus=aaa; __puus=rotated", client.cookie
     assert saved.get("cookie") == client.cookie, saved
+    # 跨地域访问放宽后的超时：常量与实际传给 urlopen 的值都必须是 120
+    assert REQUEST_TIMEOUT == 120, REQUEST_TIMEOUT
+    assert seen.get("timeout") == 120, seen
     print("call absorb ok")
 
 

@@ -230,7 +230,7 @@ async function loadSettings() {
   $("setPansouBase").value = settings.pansou_base || "";
   $("setPansouUser").value = settings.pansou_username || "";
   $("setMinVideo").value = settings.min_video_mb || 30;
-  $("setCheckLimit").value = settings.check_limit || 10;
+  $("setCheckLimit").value = settings.check_limit || 20;
   $("setCheckAlive").checked = settings.check_alive === "1";
   setFolderSel("movie", settings.movie_fid, settings.movie_name);
   setFolderSel("tv", settings.tv_fid, settings.tv_name);
@@ -324,7 +324,7 @@ async function saveSettingsCore() {
     movie_name: window._folderSel.movie.name,
     tv_name: window._folderSel.tv.name,
     min_video_mb: $("setMinVideo").value || "30",
-    check_limit: $("setCheckLimit").value || "10",
+    check_limit: $("setCheckLimit").value || "20",
     check_alive: $("setCheckAlive").checked ? "1" : "0",
   });
 }

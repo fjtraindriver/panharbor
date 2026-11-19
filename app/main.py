@@ -262,7 +262,7 @@ class Handler(BaseHTTPRequestHandler):
             "tv_name": store.get_setting("tv_name"),
             "has_tmdb_key": bool(store.get_setting("tmdb_api_key")),
             "min_video_mb": store.get_setting("min_video_mb", "30"),
-            "check_limit": store.get_setting("check_limit", "10"),
+            "check_limit": store.get_setting("check_limit", "20"),
             "check_alive": store.get_setting("check_alive", "1"),
         }
 
@@ -310,22 +310,49 @@ class Handler(BaseHTTPRequestHandler):
         kw = (body.get("kw") or "").strip()
         if not kw:
             return self._send_json({"error": "片名不能为空"}, 400)
-        candidates = _pansou().search(kw)
-        # 验活（可关）：用夸克 Cookie 逐条轻量验，只验前 N 条
-        if store.get_setting("check_alive", "1") == "1" and store.get_setting("quark_cookie"):
-            limit = int(store.get_setting("check_limit", "10") or 10)
-            client = _quark()
-            for idx, cand in enumerate(candidates):
-                if idx >= limit:
-                    cand["alive"] = None
-                    continue
-                alive, top = client.check_share_alive(cand["url"], cand.get("password", ""))
-                cand["alive"] = alive
-                cand["top_count"] = len(top)
+        pansou = _pansou()
+        candidates = pansou.search(kw)
+        # 验链（可关）：只验前 N 条。验链是访客行为，全程不带夸克 Cookie：
+        # 优先 pansou 批量检测接口（自带缓存与五态判定），接口不可用时
+        # 兜底用匿名夸克客户端直查。Cookie 只留给计划/转存等账号操作。
+        if store.get_setting("check_alive", "1") == "1":
+            # 上限钳到 pansou 批量接口的单次硬顶 256，超过它整批会被拒
+            limit = min(int(store.get_setting("check_limit", "20") or 20), 256)
+            self._apply_alive(pansou, candidates, limit)
         else:
             for cand in candidates:
                 cand["alive"] = None
         return self._send_json({"candidates": candidates})
+
+    @staticmethod
+    def _alive_from_state(state):
+        """pansou 五态 → 页面三态：ok=有效，bad=失效，其余（locked /
+        uncertain / unsupported / 缺失）一律未验，不把不确定判成死链。"""
+        if state == "ok":
+            return True
+        if state == "bad":
+            return False
+        return None
+
+    def _apply_alive(self, pansou, candidates, limit):
+        head = candidates[:limit] if limit > 0 else []
+        for cand in candidates:
+            cand["alive"] = None
+        if not head:
+            return
+        try:
+            states = pansou.check_links(head)
+        except Exception:
+            states = None  # pansou 验链不可用（旧版/异常）→ 匿名直查兜底
+        if states is not None:
+            for cand in head:
+                cand["alive"] = self._alive_from_state(states.get(cand["url"]))
+            return
+        anon = QuarkClient("", anonymous=True)
+        for cand in head:
+            alive, top = anon.check_share_alive(cand["url"], cand.get("password", ""))
+            cand["alive"] = alive
+            cand["top_count"] = len(top)
 
     def _plan(self, body):
         url = body.get("url") or ""

@@ -2,15 +2,17 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e13">
 <title>PanHarbor · 找片转存</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="alternate icon" type="image/x-icon" href="/favicon.ico">
-<link rel="stylesheet" href="/style.css?v=0.4.0">
+<link rel="stylesheet" href="/style.css?v=0.4.1">
 </head>
 <body>
 <div id="loginView" class="login-wrap hidden">
   <div class="login-box">
+    <img class="login-mark" src="/favicon.svg" alt="">
     <h1>PanHarbor</h1>
     <p class="muted">搜片 → 转存到网盘</p>
     <input id="loginPassword" type="password" placeholder="访问密码" autocomplete="current-password">
@@ -21,7 +23,7 @@
 
 <div id="appView" class="hidden">
   <header>
-    <div class="brand">PanHarbor</div>
+    <div class="brand"><img class="brand-mark" src="/favicon.svg" alt=""><span>PanHarbor</span></div>
     <div class="head-status">
       <span id="dotPansou" class="dot" title="pansou 状态"></span> pansou
       <span id="dotQuark" class="dot" title="夸克状态"></span> 夸克
@@ -40,7 +42,7 @@
     <!-- 搜索 -->
     <section id="tab-search" class="tabpage">
       <div class="searchbar">
-        <input id="kw" type="text" placeholder="输入片名，如：唐人街探案">
+        <input id="kw" type="text" placeholder="输入片名，如：唐人街探案" enterkeyhint="search">
         <input id="note" type="text" placeholder="备注（可选，如：只要4K）">
         <button id="searchBtn" class="primary">查影片</button>
         <button id="directSearchBtn" class="ghost">直接搜资源</button>
@@ -131,7 +133,8 @@
       <div class="card">
         <h3>规则</h3>
         <label>小文件阈值 MB（低于此体积的视频视为样片/广告）<input id="setMinVideo" type="number" min="0"></label>
-        <label>验链条数上限 <input id="setCheckLimit" type="number" min="0"></label>
+        <label>验链条数上限 <input id="setCheckLimit" type="number" min="0" max="256"></label>
+        <p class="muted">按搜索结果顺序自动验前 N 条（默认 20，pansou 单次批量上限 256）。超出的标「未验」仍可选用，生成计划时会真验；pansou 带检测缓存，重复搜同一片不会重复验，调大主要是首次搜索变慢。</p>
         <label><input id="setCheckAlive" type="checkbox"> 搜索后自动验链（关掉搜索更快，但死链要到计划阶段才暴露）</label>
       </div>
       <div class="row"><button id="saveSettings" class="primary">保存设置</button><span id="saveSettingsMsg" class="muted"></span></div>
@@ -149,6 +152,6 @@
     </section>
   </main>
 </div>
-<script src="/app.js?v=0.4.0"></script>
+<script src="/app.js?v=0.4.1"></script>
 </body>
 </html>

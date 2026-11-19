@@ -104,7 +104,7 @@ def test_api():
             status, _, data = req(port, "GET", "/")
             html = data.decode("utf-8")
             assert "metaResults" in html and "directSearchBtn" in html and "setTmdbKey" in html
-            assert "/app.js?v=0.4.0" in html
+            assert "/app.js?v=0.4.1" in html
             print("api ok")
         finally:
             metadata.search_all = orig
